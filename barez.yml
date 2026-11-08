@@ -1,4 +1,4 @@
-name: barez-monitor
+name: bareZ-monitor
 
 on:
   schedule:
