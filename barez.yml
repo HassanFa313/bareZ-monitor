@@ -1,0 +1,69 @@
+name: barez-monitor
+
+on:
+  schedule:
+    # هر ۵ دقیقه (حداقل فاصلهٔ مجاز گیت‌هاب). خود اسکریپت بیرون بازه‌های
+    # تهران (۷–۹ و ۱۰–۱۵) را بی‌صدا رد می‌کند.
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "check = بررسی معمولی | test = پیام آزمایشی به بله"
+        required: false
+        default: "check"
+        type: choice
+        options:
+          - check
+          - test
+
+permissions:
+  contents: read
+
+concurrency:
+  group: barez
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Get code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Restore last state
+        uses: actions/cache/restore@v4
+        with:
+          path: barez_state.json
+          key: barez-state-${{ github.run_id }}
+          restore-keys: barez-state-
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run check (or send test message)
+        env:
+          BALE_TOKEN: ${{ secrets.BALE_TOKEN }}
+          BALE_CHAT_ID: ${{ secrets.BALE_CHAT_ID }}
+        run: |
+          if [ "${{ github.event.inputs.mode }}" = "test" ]; then
+            python barez_monitor.py --test-notify
+          else
+            python barez_monitor.py --check-in-window
+          fi
+
+      - name: Make sure state file exists
+        if: always()
+        run: '[ -f barez_state.json ] || echo "{}" > barez_state.json'
+
+      - name: Save state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: barez_state.json
+          key: barez-state-${{ github.run_id }}
